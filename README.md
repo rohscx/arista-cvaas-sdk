@@ -403,10 +403,8 @@ pp.pprint(sdk.get_users_and_groups())
 
 
 ```python
-# Usage:
-
-# Copy multiple configlets with specified new names
-# pp.pprint(sdk.copy_configlet([x[0] for x in configlet_names_ids], repace_name([x[0] for x in configlet_names_ids],"devdeirt99")))
+Copy multiple configlets with specified new names
+pp.pprint(sdk.copy_configlet([x[0] for x in configlet_names_ids], repace_name([x[0] for x in configlet_names_ids],"devdeirt99")))
 ```
 
     [{'data': {'config': 'hostname devdeIrt99',
@@ -541,8 +539,7 @@ pp.pprint(sdk.get_users_and_groups())
 
 
 ```python
-# Copy a configlet by name or ID
-# print(sdk.copy_configlet(["devfricr01_hostname_conf"]))
+print(sdk.copy_configlet(["devfricr01_hostname_conf"]))
 ```
 
   
@@ -552,7 +549,7 @@ pp.pprint(sdk.get_users_and_groups())
 
 
 ```python
-# print(sdk.append_configlet("RECONCILE_ZTW285931A9", "global_aaa_conf"))
+print(sdk.append_configlet("RECONCILE_ZTW285931A9", "global_aaa_conf"))
 ```
 
 ### GET CONFIGLET NAMES AND IDs FILTERED BY A REGEX PATTERN
@@ -601,7 +598,6 @@ sdk.get_device_configlets(process_all=True)
 
 
 ```python
-# pp.pprint(sdk.get_device_configlets("ba:dd:ea:db:ee:f0"))
 [x["name"]for x in sdk.get_device_configlets("ba:dd:ea:db:ee:f0")["configletList"]]
 ```
 
@@ -683,7 +679,6 @@ sdk.extract_container_ids_by_hierarchy(sdk.get_provisioning_filter_topology(valu
 
 
 ```python
-import json
 data = [{'data': [{'action': 'add',
            'fromId': '',
            'fromName': '',
@@ -695,7 +690,7 @@ data = [{'data': [{'action': 'add',
            'toId': 'root',
            'toIdType': 'container',
            'toName': 'Tenant'}]}]
-# sdk.post_provisioning_add_temp_actions(data_list = data)
+sdk.post_provisioning_add_temp_actions(data_list = data)
 ```
 
 ### RETREIVES ALL TEMPORARY PROVISIONING ACTIONS IN CVASS
@@ -793,7 +788,7 @@ data = {'data': [{'action': 'delete',
            'nodeName': 'name_not_required',
            'nodeType': 'container',
                  }]}
-# sdk.post_provisioning_add_temp_actions(data = data)
+sdk.post_provisioning_add_temp_actions(data = data)
 ```
 
 
@@ -857,7 +852,7 @@ hierarchy_dict = sdk.generate_topology_hierarchy_post_data(input_dict,print_asci
 
 
 ```python
-# sdk.post_provisioning_add_temp_actions(data = hierarchy_dict)
+sdk.post_provisioning_add_temp_actions(data = hierarchy_dict)
 ```
 
 ### GIVEN VISUALIZE THE DIRECTORY HIERARCHY
