@@ -2,14 +2,34 @@ import requests
 import re
 import json
 import uuid
+import sys
 from json.decoder import JSONDecodeError
 from tqdm import tqdm
 from typing import Any, Dict, List, Tuple, Optional, Union
 from collections import deque
 from requests import Response
 
-class AristaCVAAS:
-    def __init__(self, host_url: str, token: str, path: str = "/cvpservice") -> None:
+class DependencyTracker:
+    dependencies = {}
+
+    def track_dependencies(self, *args):
+        self.__class__.dependencies[self.__class__.__name__] = {
+            'dependencies': [],
+            'python_version': sys.version
+        }
+        for arg in args:
+            if isinstance(arg, DependencyTracker):
+                self.__class__.dependencies[self.__class__.__name__]['dependencies'].append(arg.__class__.__name__)
+
+    @classmethod
+    def output_dependencies(cls):
+        for class_name, info in cls.dependencies.items():
+            print(f'{class_name}:')
+            print(f'    Dependencies: {", ".join(info["dependencies"]) if info["dependencies"] else "None"}')
+            print(f'    Python Version: {info["python_version"]}')
+class AristaCVAAS(DependencyTracker):
+    def __init__(self, host_url: str, token: str, path: str = "/cvpservice", *args) -> None:
+        super().track_dependencies(*args)  # call to track dependencies
         self.host_url = host_url
         self.path = path
         self.token = token
@@ -17,7 +37,7 @@ class AristaCVAAS:
         self.headers = {
             'Authorization': f'Bearer {self.token}'
         }
-
+        
     def _check_response(self, response):
         try:
             json_data = response.json()
