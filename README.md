@@ -202,7 +202,7 @@ api.get_inventory_devices()
 
 
 ```python
-api.get_inventory_devices(system_mac_addresses = ["c4:ca:2b:bc:44:3d"])
+api.get_inventory_devices(system_mac_addresses = ["ba:dd:ea:db:ee:f1"])
 ```
 
 ### GET USER INFORMATION, INCLUDING ONLINE STATUS
@@ -377,16 +377,16 @@ pp.pprint(api.get_users_and_groups())
                 ...}]}
 
 
-### CREATE A COPY OF A MULTIPLE CONFIGLETS USING MY STANDARD NAMING CONVENTION
+### CREATE A COPY OF A MULTIPLE CONFIGLETS
 #### CONFIGLET-TYPE_NAME_FUNCTION_conf
-#### REPLACES THE CONFIGLET NAME WITH THE SPECIFIED NAME
+#### REPLACES THE CONFIGLET NAME WITH THE SPECIFIED STRING USING repace_name FUNCTION
 
 
 ```python
 # Usage:
 
 # Copy multiple configlets with specified new names
-# pp.pprint(api.copy_configlet([x[0] for x in configlet_names_ids], repace_name([x[0] for x in configlet_names_ids],"devdeirt99")))
+pp.pprint(api.copy_configlet([x[0] for x in configlet_names_ids], repace_name([x[0] for x in configlet_names_ids],"devdeirt99")))
 ```
 
     [{'data': {'config': 'hostname devdeIrt99',
@@ -517,7 +517,7 @@ pp.pprint(api.get_users_and_groups())
 
 
 ### CREATE A COPY OF A CONFIGLET
-#### COPY WILL HAVE SUFFIX "copy"
+#### COPY WILL APPEND "copy" TO THE CONFIGLET NAME
 
 
 ```python
@@ -582,7 +582,7 @@ api.get_device_configlets(process_all=True)
 
 ```python
 # pp.pprint(api.get_device_configlets("ba:dd:ea:db:ee:f0"))
-[x["name"]for x in api.get_device_configlets("ba:dd:ea:db:ee:f0")["configletList"]]
+[x["name"] for x in api.get_device_configlets("ba:dd:ea:db:ee:f0")["configletList"]]
 ```
 
 
@@ -650,7 +650,7 @@ api.get_provisioning_filter_topology(value_pattern=r'^WESTMINSTER.*')
 
 
 ### FILTERS CURRENT CONTAINER PROVISIONING HIERARCHY AND RETUNS A SORTED LIST OF PARENTS FOLLOWED BY CHILDREN.
-##### CAN BE USED TO DELETE A CONTAINER WITH CONTAINERS SO LONG AS DEVICES ARE NOT ATTACHED.
+##### CAN BE USED TO DELETE A CONTAINER WITH CHILD CONTAINERS SO LONG AS DEVICES ARE NOT ATTACHED TO THE CONTAINER.
 
 
 ```python
@@ -800,7 +800,7 @@ data = {'data': [{'action': 'delete',
 
 
 
-### GIVEN A CONTAINER HIERARCHY AS A DICTONARY, RETURNS A LIST OF DICTIONARY USED TO CREATE THE HIERARCHY IN CVP 
+### GIVEN A CONTAINER HIERARCHY AS A DICTONARY, RETURNS A LIST OF DICTIONARIES THAT CAN BE USED USED TO CREATE THE HIERARCHY IN CVP 
 
 
 ```python
@@ -839,7 +839,8 @@ hierarchy_dict = api.generate_topology_hierarchy_post_data(input_dict,print_asci
 # api.post_provisioning_add_temp_actions(data = hierarchy_dict)
 ```
 
-### GIVEN VISUALIZE THE DIRECTORY HIERARCHY
+### VISUALIZE EXISTING CVASS DIRECTORY HIERARCHY
+##### return_structure=True RETURNS A LIST OF DICTIONARIES THAT CAN BE USED TO RECREATE THE HIERARCHY
 
 
 ```python
@@ -849,7 +850,7 @@ api.generate_topology_hierarchy_ascii_tree(value_pattern=r'^WESTMINSTER.*',retur
     +- WESTMINSTER
     |  +- MAIN_HUB
     |  |  +- WESTMINSTER
-    |  |  +- SPRINGFIELD
+    |  |  +- SHINJUKU
     |  |  +- WEST-WESTMINSTER
     |  +- SITE
     |  |  +- BUILDING1
@@ -875,7 +876,7 @@ api.generate_topology_hierarchy_ascii_tree(value_pattern=r'^WESTMINSTER.*',retur
 
 
 
-    [{'WESTMINSTER': [{'MAIN_HUB': ['WESTMINSTER', 'SPRINGFIELD', 'WEST-WESTMINSTER']},
+    [{'WESTMINSTER': [{'MAIN_HUB': ['WESTMINSTER', 'SHINJUKU', 'WEST-WESTMINSTER']},
        {'SITE': ['BUILDING1',
          'BUILDING2',
          'BUILDING3',
