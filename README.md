@@ -6,11 +6,12 @@ A Python SDK encapsulated as a class for interacting with Arista's Cloud Vision 
 
 ```
 import sys
+import json
+import pprint as pp
 # caution: path[0] is reserved for script path (or '' in REPL)
 sys.path.insert(1, '~/SciPy/utils/')
 
 from arista_cvaas_sdk import AristaCVAAS
-import pprint as pp
 ```
 
 ### UTILITY FUNCTIONS
@@ -662,7 +663,6 @@ api.extract_container_ids_by_hierarchy(api.get_provisioning_filter_topology(valu
 
 
 ```python
-import json
 data = [{'data': [{'action': 'add',
            'fromId': '',
            'fromName': '',
