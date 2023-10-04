@@ -987,5 +987,5 @@ api.group_devices(grouping_key = "complianceCode")
 
 
 ```python
-
+api.group_devices(grouping_key = "internalVersion")
 ```
