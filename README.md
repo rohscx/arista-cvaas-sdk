@@ -1,7 +1,3 @@
-Certainly. Below is the content of the updated README.md file in markdown format:
-
----
-
 # Arista CVaaS SDK
 
 This Python SDK facilitates interaction with Arista's Cloud Vision as a Service (CVaaS), aiding in the management, monitoring, and automation of network services within the Arista ecosystem. The SDK is encapsulated as a class, providing a structured and object-oriented approach. This SDK was developed to be utilized within a Jupyter Notebook environment.
