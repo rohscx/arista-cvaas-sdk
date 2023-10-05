@@ -3,6 +3,7 @@ import re
 import json
 import uuid
 import sys
+import copy
 from json.decoder import JSONDecodeError
 from tqdm import tqdm
 from typing import Any, Dict, List, Tuple, Optional, Union
@@ -85,7 +86,35 @@ class AristaCVAAS(DependencyTracker):
         new_prefix = f"{prefix}|  "
         for child in container['childContainerList']:
             AristaCVAAS._print_tree(child, new_prefix)
+    
+    def flatten_model_recursive(self, model: Union[dict, list]) -> List[Union[str, int]]:
+        """Flattens the model into a one-dimensional list."""
+        flat_list = []
 
+        if isinstance(model, dict):
+            for key, value in model.items():
+                flat_list.extend(self.flatten_model_recursive(value))
+
+        elif isinstance(model, list):
+            for item in model:
+                flat_list.extend(self.flatten_model_recursive(item))
+
+        else:
+            return [model]
+
+        return flat_list
+
+    @staticmethod
+    def compare_models(model_a: Any, model_b: Any) -> List[str]:
+        """Compare two models and return items that exist in model_a but not in model_b."""
+        model_a
+        diff_list = []
+        for item in model_a:
+            if item not in model_b:
+                diff_list.append(item)
+        return diff_list
+            
+    @staticmethod
     def generate_topology_hierarchy_post_data(
         input_dict: Dict[str, Union[str, List[Union[str, Dict[str, Any]]]]],
         parent_id: str = 'root',
@@ -232,6 +261,92 @@ class AristaCVAAS(DependencyTracker):
         for container in containers:
             AristaCVAAS._post_order_traversal(container['list'], deletion_order)
         return deletion_order
+    
+    
+#     start
+    @staticmethod
+    def find_container_key(topology_data: Dict[str, Any], 
+                           name: str, 
+                           fallback_value: Optional[str] = None) -> Optional[str]:
+        """
+        Find the container key for a given name in a topology data structure.
+
+        Parameters:
+            topology_data: Dictionary containing topology information.
+            name: Name of the container to search for.
+            fallback_value: Fallback value to return if the key is not found.
+
+        Returns:
+            The container key if found, fallback_value otherwise.
+        """
+
+        # Helper function to search recursively in child containers
+        def search_in_child(child_list: List[Dict[str, Any]]) -> Optional[str]:
+            for child in child_list:
+                if child['name'] == name:
+                    return child['key']
+                found_key = search_in_child(child.get('childContainerList', []))
+                if found_key:
+                    return found_key
+            return None
+
+        # Call the helper function and return its result or the fallback_value
+        result = search_in_child(topology_data['list'].get('childContainerList', []))
+        return result if result is not None else fallback_value
+
+    def update_node_and_to_ids(self,
+            topology_data: Dict[str, Union[str, List[Dict[str, Union[str, List[Dict[str, str]]]]]]],
+            array_to_update: List[Dict[str, List[Dict[str, str]]]]
+        ) -> List[Dict[str, List[Dict[str, str]]]]:
+        """
+        Update 'nodeId' and related 'toId' fields in array_to_update where 'nodeName' matches name.
+
+        Parameters:
+            topology_data: Dictionary containing topology information.
+            array_to_update: List of dictionaries to update.
+
+        Returns:
+            Updated array if new 'nodeId' is found, otherwise the original array.
+        """
+        for entry in array_to_update:
+            for data in entry['data']:
+                original_node_name = data['nodeName']
+                original_node_id = data['nodeId']
+
+                # Use find_container_key to determine new_node_id
+                new_node_id = self.find_container_key(topology_data, original_node_name, original_node_id)
+
+                # If new_node_id is different from original_node_id, update it
+                if new_node_id != original_node_id:
+                    data['nodeId'] = new_node_id
+
+                    # Update 'toId' and 'toName' in all entries where it matches original_node_id
+                    for to_entry in array_to_update:
+                        for to_data in to_entry['data']:
+                            if to_data['toId'] == original_node_id:
+                                to_data['toId'] = new_node_id
+                                to_data['toName'] = original_node_name
+
+        return array_to_update
+    
+    @staticmethod
+    def prune_existing_containers(array_to_prune: List[Dict[str, List[Dict[str, Union[str, None]]]]]) -> List[Dict[str, List[Dict[str, Union[str, None]]]]]:
+        """
+        Prune the list of dictionaries to only include entries where nodeId contains 'New_Container_'.
+
+        Parameters:
+        - array_to_prune (List[Dict[str, List[Dict[str, Union[str, None]]]]]): The array to be pruned.
+
+        Returns:
+        - List[Dict[str, List[Dict[str, Union[str, None]]]]]: The pruned array.
+        """
+        pruned_array = []
+        for entry in array_to_prune:
+            data_list = entry.get('data', [])
+            pruned_data_list = [data_entry for data_entry in data_list if 'New_Container_' in str(data_entry.get('nodeId', ''))]
+            if pruned_data_list:
+                pruned_array.append({'data': pruned_data_list})
+        return pruned_array
 
     def generate_topology_hierarchy_ascii_tree(
         self,
