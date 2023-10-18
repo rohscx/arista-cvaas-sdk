@@ -490,6 +490,30 @@ class AristaCVAAS(DependencyTracker):
             return error_response
 
         return response.status_code, response.json()
+    
+
+    def get_configlet_by_name(self, configlet_name: str) -> Union[Dict[str, Any], None]:
+        """
+        Retrieves a configlet by its name.
+
+        Parameters:
+        - configlet_name (str): The name of the configlet to retrieve.
+
+        Returns:
+        - Union[Dict[str, Any], None]: The JSON response containing the configlet data, 
+                                        or None if the configlet is not found.
+        """
+        configlet_names_ids = self.get_configlet_names_ids()
+        if isinstance(configlet_names_ids, dict):  # Check if the response is an error message
+            return configlet_names_ids  # Return the error message
+        
+        # Find the ID of the configlet with the specified name
+        configlet_id = next((id for name, id in configlet_names_ids if name == configlet_name), None)
+        if not configlet_id:
+            return None  # Configlet not found
+        
+        # Retrieve and return the configlet data using the found ID
+        return self.get_configlet_by_id(configlet_id)
 
     def get_configlet_names_ids(self, regex: Optional[str] = None) -> Union[Dict[str, Any], List[Tuple[str, str]]]:
         """
