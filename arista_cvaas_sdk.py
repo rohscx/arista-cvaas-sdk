@@ -4,6 +4,7 @@ import json
 import uuid
 import sys
 import copy
+import pprint as pp
 from json.decoder import JSONDecodeError
 from tqdm import tqdm
 from typing import Any, Dict, List, Tuple, Optional, Union
@@ -420,6 +421,42 @@ class AristaCVAAS(DependencyTracker):
                 grouped_devices[key] = [device_info]
 
         return grouped_devices
+    
+    def search_configlet_by_regex(self, configlet_search_string: str, readable_only:bool=False) -> Union[Dict[str, Any], None]:
+        """
+        Retrieves a configlet by by its contents containing a specified string.
+
+        Parameters:
+        - configlet_search_string (str): Regex search the configlet to retrieve.
+
+        Returns:
+        - Union[Dict[str, Any], None]: The JSON response containing the configlet data, 
+                                        or None if the configlet is not found.
+        """
+        c = re.compile(configlet_search_string)
+        configlet_ids = [x[1] for x in self.get_configlet_names_ids()]
+        configlet_data = [self.get_configlet_by_id(x) for x in configlet_ids]
+
+        results = {}
+
+        for x in configlet_data:
+            m = re.findall(c, x["config"])
+            if m:
+                results[x["name"]] = {
+                    "config": x["config"],
+                    "assignment": self.get_configlet_applied_devices([x["name"]]),
+                    "matched": m
+                }
+        if readable_only:
+            if results.keys():
+                for x in results.keys():
+                    pp.pprint(results[x]["assignment"])
+                    pp.pprint(results[x]["matched"])
+                    print("\n",results[x]["config"])
+                return None
+
+        # Return the dictionary containing the results
+        return results
 
     def get_system_mac_address_by_name(self, regex: Optional[str] = None) -> List[Tuple[str, str]]:
         """
