@@ -280,7 +280,6 @@ class AristaCVAAS(DependencyTracker):
         Returns:
             The container key if found, fallback_value otherwise.
         """
-
         # Helper function to search recursively in child containers
         def search_in_child(child_list: List[Dict[str, Any]]) -> Optional[str]:
             for child in child_list:
@@ -309,7 +308,9 @@ class AristaCVAAS(DependencyTracker):
         Returns:
             Updated array if new 'nodeId' is found, otherwise the original array.
         """
-        for entry in array_to_update:
+        copy_array_to_update = copy.deepcopy(array_to_update)
+        check_containers = self.generate_topology_hierarchy_ascii_tree(return_structure = True, return_no_ascii = True)
+        for entry in copy_array_to_update:
             for data in entry['data']:
                 original_node_name = data['nodeName']
                 original_node_id = data['nodeId']
@@ -322,13 +323,13 @@ class AristaCVAAS(DependencyTracker):
                     data['nodeId'] = new_node_id
 
                     # Update 'toId' and 'toName' in all entries where it matches original_node_id
-                    for to_entry in array_to_update:
+                    for to_entry in copy_array_to_update:
                         for to_data in to_entry['data']:
-                            if to_data['toId'] == original_node_id:
+                            if (to_data['toId'] == original_node_id):                                
                                 to_data['toId'] = new_node_id
                                 to_data['toName'] = original_node_name
 
-        return array_to_update
+        return copy_array_to_update
     
     @staticmethod
     def prune_existing_containers(array_to_prune: List[Dict[str, List[Dict[str, Union[str, None]]]]]) -> List[Dict[str, List[Dict[str, Union[str, None]]]]]:
@@ -352,7 +353,8 @@ class AristaCVAAS(DependencyTracker):
     def generate_topology_hierarchy_ascii_tree(
         self,
         value_pattern: Optional[str] = None,
-        return_structure: bool = False
+        return_structure: bool = False,
+        return_no_ascii: bool = False
     ) -> Optional[Union[Dict[str, List[Union[str, Dict[str, Any]]]], List[Dict[str, List[Union[str, Dict[str, Any]]]]]]]:
         """
         Generates an ASCII tree of the topology hierarchy and optionally returns the hierarchy structure.
@@ -360,6 +362,7 @@ class AristaCVAAS(DependencyTracker):
         Parameters:
         - value_pattern (Optional[str], optional): The value pattern to filter containers. Defaults to None.
         - return_structure (bool, optional): Whether to return the hierarchy structure. Defaults to False.
+        - return_no_ascii (bool, optional): Whether to return the hierarchy ASCII structure. Defaults to False.
 
         Returns:
         - Optional[Union[Dict[str, List[Union[str, Dict[str, Any]]]], List[Dict[str, List[Union[str, Dict[str, Any]]]]]]:
@@ -367,12 +370,12 @@ class AristaCVAAS(DependencyTracker):
         """
         root_container = self.get_provisioning_filter_topology(value_pattern)
         hierarchy_structure = None
-
-        if type(root_container) == list:
-            for x in root_container:
-                AristaCVAAS._print_tree(x['list'])
-        else:
-            AristaCVAAS._print_tree(root_container['list'])
+        if return_no_ascii == False:
+            if type(root_container) == list:
+                for x in root_container:
+                    AristaCVAAS._print_tree(x['list'])
+            else:
+                AristaCVAAS._print_tree(root_container['list'])
 
         if return_structure:
             if type(root_container) == list:
@@ -421,38 +424,73 @@ class AristaCVAAS(DependencyTracker):
                 grouped_devices[key] = [device_info]
 
         return grouped_devices
-
-    def get_configlets_by_regex_match(self, configlet_search_string: str, readable_only: bool = False, terse: bool = False) -> Union[Dict[str, Any], None]:
+    
+    def search_duplicate_lines(self, target_configlet_name: str, exclusion_strings: list, terse: bool = True):
         """
-        Searches for configlets whose contents match a specified regex.
+        Searches all configlets for duplicate lines from the target configlet,
+        excluding those configlets that contain any of the specified exclusion strings in their name.
 
         Parameters:
-        - configlet_search_string (str): The regex pattern to search for within the configlets.
+        - target_configlet_name (str): The name of the target configlet whose non-empty lines are to be matched.
+        - exclusion_strings (list): A list of strings; configlets containing any of these strings in their name are excluded.
+        - terse (bool): A flag passed to the get_configlets_by_regex_match method; defaults to True.
+
+        Returns:
+        - list: A list of dictionaries representing the configlets with duplicate lines.
+        """
+        # Get the target configlet's data by its name
+        target_configlet_data = self.get_configlet_by_name(target_configlet_name)["config"]
+
+        # Process the target configlet's data to get a list of non-empty lines,
+        # splitting on either '\n' or '\r\n'
+        non_empty_lines = [line for line in re.split(r'\n|\r\n', target_configlet_data) if not re.search("(!)", line)]
+
+        # Get a list of configlets that match the non-empty lines from the target configlet
+        matching_configlets = self.get_configlets_by_regex_match(non_empty_lines, terse=terse)
+
+        # Filter out configlets that contain any of the exclusion strings in their name
+        filtered_configlets = [configlet for configlet in matching_configlets
+                               if not any(exclusion_string in configlet["configlet"] for exclusion_string in exclusion_strings)]
+
+        return filtered_configlets
+
+    def get_configlets_by_regex_match(self, configlet_search_strings: List[str], readable_only: bool = False, terse: bool = False) -> Union[Dict[str, Any], None]:
+        """
+        Searches for configlets whose contents match any of the specified regex patterns.
+
+        Parameters:
+        - configlet_search_strings (List[str]): The regex patterns to search for within the configlets.
         - readable_only (bool): If True, prints the matched configlets in a readable format instead of returning the data.
-        - terse (bool): If True, terse details about the matched configlets in the return value.
+        - terse (bool): If True, returns terse details about the matched configlets.
 
         Returns:
         - The data of matched configlets, or None if `readable_only` is True or no configlets are found.
         """
-        regex = re.compile(configlet_search_string)
+
         configlet_ids = [item[1] for item in self.get_configlet_names_ids()]
         configlet_data = [self.get_configlet_by_id(configlet_id) for configlet_id in configlet_ids]
 
-        results = {
-            configlet["name"]: {
-                "config": configlet["config"],
-                "assignment": self.get_configlet_applied_devices([configlet["name"]]),
-                "matched": re.findall(regex, configlet["config"])
+        results = {}
+        for configlet_search_string in configlet_search_strings:
+            regex = re.compile(configlet_search_string)
+            matches = {
+                configlet["name"]: {
+                    "config": configlet["config"],
+                    "assignment": self.get_configlet_applied_devices([configlet["name"]]),
+                    "matched": re.findall(regex, configlet["config"])
+                }
+                for configlet in configlet_data if re.search(regex, configlet["config"])
             }
-            for configlet in configlet_data if re.search(regex, configlet["config"])
-        }
+            results.update(matches)
 
         if terse:
             accum_list = [
                 {
                     'configlet': configlet_name,
                     'matched': configlet_info['matched'],
-                    'assignment': [host['hostName'] for device in configlet_info['assignment'] for host in device['data']]
+                    # 'assignment': [host['hostName'] for device in configlet_info['assignment'] for host in device['data']]
+                    'assignment': [host['hostName'] for device in configlet_info['assignment'] for host in device.get('data', [])]
+
                 }
                 for configlet_name, configlet_info in results.items()
             ]
