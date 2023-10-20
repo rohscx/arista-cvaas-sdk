@@ -421,42 +421,56 @@ class AristaCVAAS(DependencyTracker):
                 grouped_devices[key] = [device_info]
 
         return grouped_devices
-    
-    def search_configlet_by_regex(self, configlet_search_string: str, readable_only:bool=False) -> Union[Dict[str, Any], None]:
+
+    def get_configlets_by_regex_match(self, configlet_search_string: str, readable_only: bool = False, terse: bool = False) -> Union[Dict[str, Any], None]:
         """
-        Retrieves a configlet by by its contents containing a specified string.
+        Searches for configlets whose contents match a specified regex.
 
         Parameters:
-        - configlet_search_string (str): Regex search the configlet to retrieve.
+        - configlet_search_string (str): The regex pattern to search for within the configlets.
+        - readable_only (bool): If True, prints the matched configlets in a readable format instead of returning the data.
+        - terse (bool): If True, terse details about the matched configlets in the return value.
 
         Returns:
-        - Union[Dict[str, Any], None]: The JSON response containing the configlet data, 
-                                        or None if the configlet is not found.
+        - The data of matched configlets, or None if `readable_only` is True or no configlets are found.
         """
-        c = re.compile(configlet_search_string)
-        configlet_ids = [x[1] for x in self.get_configlet_names_ids()]
-        configlet_data = [self.get_configlet_by_id(x) for x in configlet_ids]
+        regex = re.compile(configlet_search_string)
+        configlet_ids = [item[1] for item in self.get_configlet_names_ids()]
+        configlet_data = [self.get_configlet_by_id(configlet_id) for configlet_id in configlet_ids]
 
-        results = {}
+        results = {
+            configlet["name"]: {
+                "config": configlet["config"],
+                "assignment": self.get_configlet_applied_devices([configlet["name"]]),
+                "matched": re.findall(regex, configlet["config"])
+            }
+            for configlet in configlet_data if re.search(regex, configlet["config"])
+        }
 
-        for x in configlet_data:
-            m = re.findall(c, x["config"])
-            if m:
-                results[x["name"]] = {
-                    "config": x["config"],
-                    "assignment": self.get_configlet_applied_devices([x["name"]]),
-                    "matched": m
+        if terse:
+            accum_list = [
+                {
+                    'configlet': configlet_name,
+                    'matched': configlet_info['matched'],
+                    'assignment': [host['hostName'] for device in configlet_info['assignment'] for host in device['data']]
                 }
-        if readable_only:
-            if results.keys():
-                for x in results.keys():
-                    pp.pprint(results[x]["assignment"])
-                    pp.pprint(results[x]["matched"])
-                    print("\n",results[x]["config"])
-                return None
+                for configlet_name, configlet_info in results.items()
+            ]
+            return accum_list
 
-        # Return the dictionary containing the results
+        if readable_only and results:
+            self.print_readable(results)
+            return None
+
         return results
+
+    def print_readable(self, results: Dict[str, Any]) -> None:
+        pp = pprint.PrettyPrinter(indent=4)
+        for configlet_name, configlet_info in results.items():
+            print(f"Configlet Name: {configlet_name}")
+            pp.pprint(configlet_info["assignment"])
+            pp.pprint(configlet_info["matched"])
+            print("\n", configlet_info["config"])
 
     def get_system_mac_address_by_name(self, regex: Optional[str] = None) -> List[Tuple[str, str]]:
         """
