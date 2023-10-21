@@ -455,8 +455,8 @@ class AristaCVAAS(DependencyTracker):
         matching_configlets = self.get_configlets_by_regex_match(escaped_lines, terse=terse)
 
         # Filter out configlets that contain any of the exclusion strings in their name
-        filtered_configlets = [configlet for configlet in matching_configlets
-                               if not any(exclusion_string in configlet["configlet"] for exclusion_string in exclusion_strings)]
+        filtered_configlets = {target_configlet_name:[configlet for configlet in matching_configlets
+                               if not any(exclusion_string in configlet["configlet"] for exclusion_string in exclusion_strings)]}
 
         return filtered_configlets
 
