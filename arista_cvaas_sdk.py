@@ -445,8 +445,14 @@ class AristaCVAAS(DependencyTracker):
         # splitting on either '\n' or '\r\n'
         non_empty_lines = [line for line in re.split(r'\n|\r\n', target_configlet_data) if not re.search("(!)", line)]
 
+        # Filter out lines that contain no characters before escaping special characters
+        filtered_non_empty_lines = [line for line in non_empty_lines if line.strip()]
+
+        # Escape special characters in each line before attempting regex matching
+        escaped_lines = [re.escape(line) for line in filtered_non_empty_lines]
+
         # Get a list of configlets that match the non-empty lines from the target configlet
-        matching_configlets = self.get_configlets_by_regex_match(non_empty_lines, terse=terse)
+        matching_configlets = self.get_configlets_by_regex_match(escaped_lines, terse=terse)
 
         # Filter out configlets that contain any of the exclusion strings in their name
         filtered_configlets = [configlet for configlet in matching_configlets
