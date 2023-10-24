@@ -87,23 +87,26 @@ class AristaCVAAS(DependencyTracker):
         new_prefix = f"{prefix}|  "
         for child in container['childContainerList']:
             AristaCVAAS._print_tree(child, new_prefix)
-    
-    def flatten_model_recursive(self, model: Union[dict, list]) -> List[Union[str, int]]:
-        """Flattens the model into a one-dimensional list."""
-        flat_list = []
+            
+    @staticmethod
+    def convert_date_time_from_long_format(timestamp_milliseconds: int) -> str:
+        """
+        Convert a timestamp in milliseconds to a human-readable date-time string.
 
-        if isinstance(model, dict):
-            for key, value in model.items():
-                flat_list.extend(self.flatten_model_recursive(value))
+        Parameters:
+            timestamp_milliseconds (int): The timestamp in milliseconds.
 
-        elif isinstance(model, list):
-            for item in model:
-                flat_list.extend(self.flatten_model_recursive(item))
+        Returns:
+            str: The human-readable date-time string in 'YYYY-MM-DD HH:MM:SS' format.
+        """
 
-        else:
-            return [model]
+        # Convert milliseconds to seconds
+        timestamp_seconds = timestamp_milliseconds / 1000.0
 
-        return flat_list
+        # Convert the timestamp to a datetime object and then to a string in the desired format
+        date_str = datetime.utcfromtimestamp(timestamp_seconds).strftime('%Y-%m-%d %H:%M:%S')
+
+        return date_str
 
     @staticmethod
     def compare_models(model_a: Any, model_b: Any) -> List[str]:
@@ -293,6 +296,25 @@ class AristaCVAAS(DependencyTracker):
         # Call the helper function and return its result or the fallback_value
         result = search_in_child(topology_data['list'].get('childContainerList', []))
         return result if result is not None else fallback_value
+    
+    @staticmethod
+    def prune_existing_containers(array_to_prune: List[Dict[str, List[Dict[str, Union[str, None]]]]]) -> List[Dict[str, List[Dict[str, Union[str, None]]]]]:
+        """
+        Prune the list of dictionaries to only include entries where nodeId contains 'New_Container_'.
+
+        Parameters:
+        - array_to_prune (List[Dict[str, List[Dict[str, Union[str, None]]]]]): The array to be pruned.
+
+        Returns:
+        - List[Dict[str, List[Dict[str, Union[str, None]]]]]: The pruned array.
+        """
+        pruned_array = []
+        for entry in array_to_prune:
+            data_list = entry.get('data', [])
+            pruned_data_list = [data_entry for data_entry in data_list if 'New_Container_' in str(data_entry.get('nodeId', ''))]
+            if pruned_data_list:
+                pruned_array.append({'data': pruned_data_list})
+        return pruned_array
 
     def update_node_and_to_ids(self,
             topology_data: Dict[str, Union[str, List[Dict[str, Union[str, List[Dict[str, str]]]]]]],
@@ -330,25 +352,23 @@ class AristaCVAAS(DependencyTracker):
                                 to_data['toName'] = original_node_name
 
         return copy_array_to_update
-    
-    @staticmethod
-    def prune_existing_containers(array_to_prune: List[Dict[str, List[Dict[str, Union[str, None]]]]]) -> List[Dict[str, List[Dict[str, Union[str, None]]]]]:
-        """
-        Prune the list of dictionaries to only include entries where nodeId contains 'New_Container_'.
 
-        Parameters:
-        - array_to_prune (List[Dict[str, List[Dict[str, Union[str, None]]]]]): The array to be pruned.
+    def flatten_model_recursive(self, model: Union[dict, list]) -> List[Union[str, int]]:
+        """Flattens the model into a one-dimensional list."""
+        flat_list = []
 
-        Returns:
-        - List[Dict[str, List[Dict[str, Union[str, None]]]]]: The pruned array.
-        """
-        pruned_array = []
-        for entry in array_to_prune:
-            data_list = entry.get('data', [])
-            pruned_data_list = [data_entry for data_entry in data_list if 'New_Container_' in str(data_entry.get('nodeId', ''))]
-            if pruned_data_list:
-                pruned_array.append({'data': pruned_data_list})
-        return pruned_array
+        if isinstance(model, dict):
+            for key, value in model.items():
+                flat_list.extend(self.flatten_model_recursive(value))
+
+        elif isinstance(model, list):
+            for item in model:
+                flat_list.extend(self.flatten_model_recursive(item))
+
+        else:
+            return [model]
+
+        return flat_list
 
     def generate_topology_hierarchy_ascii_tree(
         self,
