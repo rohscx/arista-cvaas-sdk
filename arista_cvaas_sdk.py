@@ -5,12 +5,17 @@ import uuid
 import sys
 import copy
 import pprint as pp
+import tempfile
+import os
+import pandas as pd
+import logging
 from json.decoder import JSONDecodeError
 from tqdm import tqdm
 from typing import Any, Dict, List, Tuple, Optional, Union
 from collections import deque
 from requests import Response
 from datetime import datetime
+
 
 class DependencyTracker:
     dependencies = {}
@@ -88,7 +93,7 @@ class AristaCVAAS(DependencyTracker):
         new_prefix = f"{prefix}|  "
         for child in container['childContainerList']:
             AristaCVAAS._print_tree(child, new_prefix)
-            
+
     @staticmethod
     def convert_date_time_from_long_format(timestamp_milliseconds: int) -> str:
         """
@@ -197,8 +202,7 @@ class AristaCVAAS(DependencyTracker):
         if print_ascii:
             print('\n'.join(ascii_tree))  # Print the ASCII tree only if print_ascii is True
         return hierarchy_dicts
-
-    
+ 
     @staticmethod
     def _post_order_traversal(container: Dict[str, Any], order: List[str]) -> None:
         """
@@ -316,6 +320,80 @@ class AristaCVAAS(DependencyTracker):
             if pruned_data_list:
                 pruned_array.append({'data': pruned_data_list})
         return pruned_array
+    
+    def batfish_analyze_network_configs(self, device_list: list, bf_host: str = "172.16.100.1", snapshot_name: str = "snapshot") -> object:
+        """
+        Analyze a list of network device configurations to identify unused and undefined structures using the Batfish service. 
+        BATFISH server should be running on a local or remote host running Docker:
+        docker run --name batfish -v batfish-data:/data -p 8887:8888 -p 9997:9997 -p 9996:9996 batfish/allinone
+
+        Parameters:
+            device_list (list): List of dictionaries, each containing device information with keys 'hostname' and 'systemMacAddress'.
+            bf_host (str, optional): The IP address of the Batfish service. Defaults to "172.16.100.1".
+            snapshot_name (str, optional): The name to be used for the snapshot in Batfish. Defaults to "snapshot".
+
+        Returns:
+            pybatfish.client.session.Session: A Batfish Session object initialized with the provided configurations.
+
+        Raises:
+            ImportError: If pybatfish is not installed.
+        """
+
+        try:
+            import pybatfish
+        except ImportError:
+            print("pybatfish is not installed. Please install it before proceeding. !pip install --upgrade pybatfish")
+
+        import pybatfish
+        from pybatfish.client.session import Session
+
+        # Suppress log messages from Batfish
+        logging.getLogger('pybatfish').setLevel(logging.CRITICAL)
+
+        # Create temporary directory and sub-directory for configs
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_subdir = os.path.join(temp_dir, 'configs')
+            os.mkdir(config_subdir)
+
+            # Write all configurations to files in the sub-directory
+            for device in device_list:
+                hostname = device['hostname']
+                systemMacAddress = device['systemMacAddress']
+
+                # Fetch config text (replace with your actual API call)
+                config_text = self.get_inventory_device_config(systemMacAddress)["output"]
+
+                # Create and write the configuration file
+                config_filename = hostname
+                config_path = os.path.join(config_subdir, config_filename)
+                with open(config_path, 'w') as f:
+                    f.write(config_text)
+
+            # Initialize Batfish session and snapshot
+            bf = pybatfish.client.session.Session(host=bf_host)
+            bf.init_snapshot(temp_dir, name=snapshot_name, overwrite=True)
+            # Assign pybatfish to self.pybatfish
+            self.pybatfish = pybatfish
+            self.pybatfish_instance = bf
+
+        return bf
+
+    def batfish_load_network_config(self, config_text:str, config_name: str = "config_1", snapshot_name: str = "C1" , bf_host: str = "172.16.100.1"):
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_subdir = os.path.join(temp_dir, 'configs')
+            os.mkdir(config_subdir)
+
+            # Create and write the configuration file
+            config_filename = config_name
+            config_path = os.path.join(config_subdir, config_filename)
+            with open(config_path, 'w') as f:
+                f.write(config_text)
+
+            # Initialize Batfish session and snapshot
+            # bf = Session(host=bf_host)
+            self.pybatfish_instance.init_snapshot(temp_dir, name=snapshot_name, overwrite=True)
+        return self.pybatfish_instance.list_snapshots()
 
     def update_node_and_to_ids(self,
             topology_data: Dict[str, Union[str, List[Dict[str, Union[str, List[Dict[str, str]]]]]]],
@@ -721,7 +799,23 @@ class AristaCVAAS(DependencyTracker):
             response["configletName"] = name
             results.append(response)        
         return results
-   
+
+    def get_tasks(self) -> Dict[str, Any]:
+        """
+        Retrieves a list of tasks.
+
+        Returns:
+        - Dict[str, Any]: The JSON response containing the configlet data.
+        """
+        endpoint = f'/task/getTasks.do?startIndex=0&endIndex=0'
+        response = self.session.get(self.host_url + self.path + endpoint, headers=self.headers)
+
+        error_response = self._check_response(response)
+        if error_response:
+            return error_response
+
+        return response.json()
+
     def get_inventory_devices(self, provisioned: bool = False, system_mac_addresses: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
         Retrieves a list of inventory devices, optionally filtered by their provisioning status and/or system MAC addresses.
@@ -1017,17 +1111,48 @@ class AristaCVAAS(DependencyTracker):
 
         return response.json()
     
-    def post_assign_configlets_to_container(self, container_id: str, configlets: List[Dict[str, Any]]) -> Union[Dict[str, str], Dict[str, Any]]:
+    def post_get_device_managment_ip_addresses(self, device_id: str,configlets: List[Dict[str, Any]]) -> Union[Dict[str, str], Dict[str, Any]]:
         """
-        Assigns a list of configlets to a container.
+        This API is used to get a list of management IPs from Designed config
 
         Parameters:
         - container_id (str): The ID of the container.
         - configlets (List[Dict[str, Any]]): A list of configlets to be assigned.
 
         Returns:
+        - Union[Dict[str, str], Dict[str, Any]]: The JSON response containing managment IP Addresses from configlets, and default Proposed Management Ip.
+        """
+
+        # Update the target configlet with the appended configuration
+        endpoint = '/configlet/getManagementIp.do?startIndex=0&endIndex=0'
+
+        body = {
+          "configIdList": configlets,
+          "netElementId": device_id,
+          "pageType": "validatePage"
+        }
+        response = self.session.post(self.host_url + self.path + endpoint, headers=self.headers, json=body)
+
+        error_response = self._check_response(response)
+        if error_response:
+            return error_response
+
+        return response.json()
+    
+    def post_assign_configlets_to_container(self, container_id: str, configlets: List[Dict[str, Any]], ignore_list: List[Dict[str, Any]] = []) -> Union[Dict[str, str], Dict[str, Any]]:
+        """
+        Assigns a list of configlets to a device.
+
+        Parameters:
+        - container_id (str): The ID of the container.
+        - configlets (List[Dict[str, Any]]): A list of configlets to be assigned.
+        - ignore_list (List[Dict[str, Any]]): A list of configlets to be ignored and removed from configlets.
+
+        Returns:
         - Union[Dict[str, str], Dict[str, Any]]: The JSON response or an error message.
         """
+        # remove ignore_list from configlets
+        configlets = [x for x in configlets if x not in ignore_list]
         post_data = [{'data': [{'action': 'associate',
            'configletBuilderList': [],
            'configletBuilderNamesList': [],
@@ -1036,13 +1161,46 @@ class AristaCVAAS(DependencyTracker):
            'fromName': '',
            'ignoreConfigletBuilderList': [],
            'ignoreConfigletBuilderNamesList': [],
-           'ignoreConfigletList': [],
+           'ignoreConfigletList': ignore_list,
            'ignoreConfigletNamesList': [],
            'nodeId': '',
            'nodeName': '',
            'nodeType': 'configlet',
            'toId': container_id,
            'toIdType': 'container'}]}]
+        return self.post_provisioning_add_temp_actions(data_list=post_data)
+    
+    def post_assign_configlets_to_device(self, device_id: str, node_ip_address: str, configlets: List[Dict[str, Any]], ignore_list: List[Dict[str, Any]] = [])  -> Union[Dict[str, str], Dict[str, Any]]:
+        """
+        Assigns a list of configlets to a device.
+
+        Parameters:
+        - device_id (str): The ID of the device (System MAC Address).
+        - node_ip_address(str): The Management IP address as seen in CVAAS.
+        - configlets (List[Dict[str, Any]]): A list of configlets to be assigned.
+        - ignore_list (List[Dict[str, Any]]): A list of configlets to be ignored and removed from configlets.
+
+        Returns:
+        - Union[Dict[str, str], Dict[str, Any]]: The JSON response or an error message.
+        """
+        # remove ignore_list from configlets
+        configlets = [x for x in configlets if x not in ignore_list]
+        post_data = [{'data': [{'action': 'associate',
+           'configletBuilderList': [],
+           'configletBuilderNamesList': [],
+           'configletList': configlets,
+           'fromId': '',
+           'fromName': '',
+           'ignoreConfigletBuilderList': [],
+           'ignoreConfigletBuilderNamesList': [],
+           'ignoreConfigletList': ignore_list,
+           'ignoreConfigletNamesList': [],
+           'nodeId': '',
+           'nodeName': '',
+           'nodeTargetIpAddress': node_ip_address,                     
+           'nodeType': 'configlet',
+           'toId': device_id,
+           'toIdType': 'netelement'}]}]
         return self.post_provisioning_add_temp_actions(data_list=post_data)
 
     def post_provisioning_save_temp_actions(self, data: Dict[str, Any]) -> Union[Dict[str, str], Dict[str, Any]]:
@@ -1190,6 +1348,3 @@ class AristaCVAAS(DependencyTracker):
                 container_ids_list.append(container_id)
         
         return container_ids_list
-
-    
-    
