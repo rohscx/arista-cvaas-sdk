@@ -339,21 +339,22 @@ class AristaCVAAS(DependencyTracker):
                 flattened_list.append(item)
         return flattened_list
 
-    def search_highlight_configlets(self, system_name: str, filter_substring: str, search_text: str):
+    def search_highlight_configlets(self, system_name: str, filter_substring: str, search_text: str, return_on_match: bool = False):
         """
         Searches for configlets by system name, filters them by a substring, searches within their configurations for a specified text,
-        highlights the matches, sorts the configurations, and prints each with highlights.
+        highlights the matches, sorts the configurations, and optionally only prints each with highlights when a match is found.
         
-        This method combines several operations to aid in identifying and highlighting specific configurations across device configlets
-        based on various criteria including system names, substring filters, and specific search texts.
+        This method is enhanced to conditionally return configlets based on the presence of the search text within their configurations,
+        controlled by the 'return_on_match' parameter.
 
         Parameters:
         - system_name (str): The name pattern to match systems from which to retrieve configlets.
         - filter_substring (str): A substring to filter configlets by their name.
         - search_text (str): The text to search for within configlet configurations.
+        - return_on_match (bool, optional): Controls whether to only return configlets that contain the search text. Defaults to False.
 
         Returns:
-        None. This method directly prints the modified configurations.
+        None. This method directly prints the modified configurations if they meet the criteria defined by 'return_on_match'.
         """
         device_macs = self.get_system_mac_address_by_name(system_name)
         configlets = [self.get_device_configlets(x[1]) for x in device_macs[:]]
@@ -366,8 +367,12 @@ class AristaCVAAS(DependencyTracker):
         
         for x in targets:
             config = self.get_configlet_by_name(x)["config"]
+            original_config = config  # Store original config for comparison
             highlighted_config = pattern.sub(f'>>>\\g<0><<<', config)
-            print(f'{highlighted_config}\n********\n')
+            
+            # If return_on_match is True, only print configs with at least one match
+            if not return_on_match or (return_on_match and original_config != highlighted_config):
+                print(f'{highlighted_config}\n********\n')
     
     def batfish_analyze_network_configs(self, device_list: list, bf_host: str = "172.16.100.1", snapshot_name: str = "snapshot") -> object:
         """
