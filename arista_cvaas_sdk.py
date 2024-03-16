@@ -321,6 +321,54 @@ class AristaCVAAS(DependencyTracker):
                 pruned_array.append({'data': pruned_data_list})
         return pruned_array
     
+    def flatten_array(self, arr):
+        """
+        Recursively flattens a nested list.
+        
+        Parameters:
+        - arr (list): A potentially nested list to be flattened.
+
+        Returns:
+        - list: A flattened version of the input list.
+        """
+        flattened_list = []
+        for item in arr:
+            if isinstance(item, list):
+                flattened_list.extend(self.flatten_array(item))
+            else:
+                flattened_list.append(item)
+        return flattened_list
+
+    def search_highlight_configlets(self, system_name: str, filter_substring: str, search_text: str):
+        """
+        Searches for configlets by system name, filters them by a substring, searches within their configurations for a specified text,
+        highlights the matches, sorts the configurations, and prints each with highlights.
+        
+        This method combines several operations to aid in identifying and highlighting specific configurations across device configlets
+        based on various criteria including system names, substring filters, and specific search texts.
+
+        Parameters:
+        - system_name (str): The name pattern to match systems from which to retrieve configlets.
+        - filter_substring (str): A substring to filter configlets by their name.
+        - search_text (str): The text to search for within configlet configurations.
+
+        Returns:
+        None. This method directly prints the modified configurations.
+        """
+        device_macs = self.get_system_mac_address_by_name(system_name)
+        configlets = [self.get_device_configlets(x[1]) for x in device_macs[:]]
+
+        targets = self.flatten_array([[y["name"] for y in x["configletList"]] for x in configlets])
+        targets = [x for x in targets if filter_substring in x]
+
+        pattern = re.compile(re.escape(search_text), re.IGNORECASE)
+        targets = sorted(targets)
+        
+        for x in targets:
+            config = self.get_configlet_by_name(x)["config"]
+            highlighted_config = pattern.sub(f'>>>\\g<0><<<', config)
+            print(f'{highlighted_config}\n********\n')
+    
     def batfish_analyze_network_configs(self, device_list: list, bf_host: str = "172.16.100.1", snapshot_name: str = "snapshot") -> object:
         """
         Analyze a list of network device configurations to identify unused and undefined structures using the Batfish service. 
