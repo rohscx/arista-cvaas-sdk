@@ -339,22 +339,21 @@ class AristaCVAAS(DependencyTracker):
                 flattened_list.append(item)
         return flattened_list
 
-    def search_highlight_configlets(self, system_name: str, filter_substring: str, search_text: str, return_on_match: bool = False):
+    def search_highlight_configlets(self, system_name: str, filter_substring: str, regex_pattern: str, context_lines: int = 0):
         """
-        Searches for configlets by system name, filters them by a substring, searches within their configurations for a specified text,
-        highlights the matches, sorts the configurations, and optionally only prints each with highlights when a match is found.
-        
-        This method is enhanced to conditionally return configlets based on the presence of the search text within their configurations,
-        controlled by the 'return_on_match' parameter.
+        Searches for configlets by system name, filters them by a substring, and searches within their configurations using a regular expression,
+        highlighting the matches. Depending on 'context_lines', it either returns the entire configuration, just the matching lines, or the
+        matching lines with a specified number of context lines above and below. The device and configlet name are always included in the output.
 
         Parameters:
         - system_name (str): The name pattern to match systems from which to retrieve configlets.
         - filter_substring (str): A substring to filter configlets by their name.
-        - search_text (str): The text to search for within configlet configurations.
-        - return_on_match (bool, optional): Controls whether to only return configlets that contain the search text. Defaults to False.
+        - regex_pattern (str): The regular expression pattern to search for within configlet configurations.
+        - context_lines (int, optional): Defines the number of context lines above and below the match to return. Defaults to 0,
+          which returns only the matching lines. If set to a negative number, the entire configuration is returned for matches.
 
         Returns:
-        None. This method directly prints the modified configurations if they meet the criteria defined by 'return_on_match'.
+        None. This method directly prints the configurations meeting the criteria defined by 'context_lines'.
         """
         device_macs = self.get_system_mac_address_by_name(system_name)
         configlets = [self.get_device_configlets(x[1]) for x in device_macs[:]]
@@ -362,17 +361,33 @@ class AristaCVAAS(DependencyTracker):
         targets = self.flatten_array([[y["name"] for y in x["configletList"]] for x in configlets])
         targets = [x for x in targets if filter_substring in x]
 
-        pattern = re.compile(re.escape(search_text), re.IGNORECASE)
-        targets = sorted(targets)
-        
+        pattern = re.compile(regex_pattern, re.IGNORECASE)
+
         for x in targets:
-            config = self.get_configlet_by_name(x)["config"]
-            original_config = config  # Store original config for comparison
-            highlighted_config = pattern.sub(f'>>>\\g<0><<<', config)
-            
-            # If return_on_match is True, only print configs with at least one match
-            if not return_on_match or (return_on_match and original_config != highlighted_config):
-                print(f'{highlighted_config}\n********\n')
+            config_name = x
+            config = self.get_configlet_by_name(config_name)["config"]
+            config_lines = config.split('\n')
+            matches_found = False
+            output_lines = []
+
+            for i, line in enumerate(config_lines):
+                if pattern.search(line):
+                    matches_found = True
+                    if context_lines < 0:
+                        output_lines = config_lines
+                        break
+                    else:
+                        start = max(i - context_lines, 0)
+                        end = min(i + context_lines + 1, len(config_lines))
+                        output_lines.extend(config_lines[start:end])
+                        output_lines.append("********")  # Separator for multiple matches
+
+            if matches_found or context_lines < 0:
+                print(f'Device: {system_name}, Configlet: {config_name}')
+                if output_lines:
+                    print('\n'.join(output_lines) + '\n')
+                else:
+                    print("No matches found.\n")
     
     def batfish_analyze_network_configs(self, device_list: list, bf_host: str = "172.16.100.1", snapshot_name: str = "snapshot") -> object:
         """
