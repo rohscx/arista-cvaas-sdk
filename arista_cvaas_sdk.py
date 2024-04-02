@@ -884,13 +884,14 @@ class AristaCVAAS(DependencyTracker):
 
         return response.json()
 
-    def get_inventory_devices(self, provisioned: bool = False, system_mac_addresses: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def get_inventory_devices(self, provisioned: bool = False, system_mac_addresses: Optional[List[str]] = None, system_serial_number: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
         Retrieves a list of inventory devices, optionally filtered by their provisioning status and/or system MAC addresses.
 
         Parameters:
         - provisioned (bool, optional): Whether to filter devices by their provisioning status. Defaults to False.
         - system_mac_addresses (Optional[List[str]], optional): The list of system MAC addresses to filter devices. Defaults to None.
+        - system_serial_number (Optional[List[str]], optional): The list of system Serial Numbers to filter devices. Defaults to None.
 
         Returns:
         - List[Dict[str, Any]]: A list of dictionaries, each representing a device.
@@ -906,6 +907,9 @@ class AristaCVAAS(DependencyTracker):
 
         if system_mac_addresses:
             devices = [device for device in devices if device.get('systemMacAddress') in system_mac_addresses]
+            
+        if system_serial_number:
+            devices = [device for device in devices if device.get('serialNumber') in system_serial_number]
 
         return devices
 
