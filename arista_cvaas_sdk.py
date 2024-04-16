@@ -415,6 +415,42 @@ class AristaCVAAS(DependencyTracker):
                             print('\n'.join(output_lines) + '\n')
                         else:
                             print("No matches found.\n")
+
+    def search_missing_context_lines(self, system_name: str, filter_substring: str, expected_string: str):
+        """
+        Searches for configlets by system name, filters them by a substring, and checks if the configurations are missing a specified expected string, avoiding duplicate reports.
+        
+        Parameters:
+        - system_name (str): The name pattern to match systems from which to retrieve configlets.
+        - filter_substring (str): A substring to filter configlets by their name.
+        - expected_string (str): The string to check for in the configlet configurations.
+    
+        Returns:
+        None. This method directly prints the configlets that are missing the expected string, ensuring each is reported only once.
+        """
+        device_macs = self.get_system_mac_address_by_name(system_name)
+        configlets = [self.get_device_configlets(x[1]) for x in device_macs[:]]
+        
+        # Ensure only configlets with 'configletList' are processed
+        configlets = self.filter_configlets_with_list(configlets)  
+    
+        filter_pattern = re.compile(filter_substring, re.IGNORECASE)
+        reported_configlets = set()  # Set to track reported configlets to avoid duplicates
+    
+        for configlet in configlets:
+            filtered_configlets = [item for item in configlet['configletList'] if filter_pattern.search(item["name"])]
+            for item in filtered_configlets:
+                config_name = item['name']
+                config = item['config']
+                # Check if the expected string is present in the config string and if not already reported
+                if expected_string not in config and config_name not in reported_configlets:
+                    reported_configlets.add(config_name)  # Add to the set of reported configlets
+                    applied_systems = self.flatten_array([[y["hostName"] for y in x['data']] for x in self.get_configlet_applied_devices([config_name])])
+                    print(f'Issue found in Configlet applied to Device(s): {", ".join(applied_systems)}, Configlet: {config_name}\n')
+                    print(f"Missing expected string. Expected to find: '{expected_string}' in configuration, but it was not found.\n")
+    
+
+
     
     def batfish_analyze_network_configs(self, device_list: list, bf_host: str = "172.16.100.1", snapshot_name: str = "snapshot") -> object:
         """
