@@ -383,7 +383,8 @@ class AristaCVAAS(DependencyTracker):
                         output_lines.append("********")  # Separator for multiple matches
 
             if matches_found or context_lines < 0:
-                print(f'Device: {system_name}, Configlet: {config_name}')
+                applied_systems = self.flatten_array([[y["hostName"] for y in x['data']] for x in self.get_configlet_applied_devices([config_name])])
+                print(f'Device(s): {", ".join(applied_systems)}, Configlet: {config_name}')
                 if output_lines:
                     print('\n'.join(output_lines) + '\n')
                 else:
