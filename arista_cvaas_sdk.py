@@ -351,7 +351,44 @@ class AristaCVAAS(DependencyTracker):
         list of dicts: A filtered list of configlet objects that include the 'configletList' key.
         """
         return [configlet for configlet in configlets if 'configletList' in configlet]
+   
+    @staticmethod
+    def match_config_patterns(config:str, patterns:str, print_matches=True):
+        """
+        Checks a configuration against a list of regex patterns and returns the match results along with the matched text in a structured dictionary.
+        Optionally prints the matched text based on a control flag.
+        
+        Parameters:
+        - config (str): The multi-line configuration string to be checked.
+        - patterns (list of str): A list of regex patterns used for fuzzy matching.
+        - print_matches (bool, optional): Flag to control whether to print the matched text. Defaults to True.
     
+        Returns:
+        dict: A dictionary with each pattern as a key, and each value is another dictionary with 'matched' (bool) and 'text' (str or None).
+        """
+        results = {}
+        for pattern in patterns:
+            # Compile the regex pattern for more efficient matching
+            regex = re.compile(pattern.strip(), re.MULTILINE | re.DOTALL)
+            
+            # Search for the pattern in the config string
+            match = regex.search(config)
+            if match:
+                # If a match is found, store both the match status and the matched text
+                results[pattern] = {'matched': True, 'text': match.group(0)}
+                if print_matches:
+                    print(f"<------>\nPattern:\n{pattern}")
+                    print(f"Matched: {True}")
+                    print(f"Matched text:\n{match.group(0)}\n")
+            else:
+                # If no match is found, indicate no match and provide None for the text
+                results[pattern] = {'matched': False, 'text': None}
+                if print_matches:
+                    print(f"<------>\nPattern:\n{pattern}")
+                    print(f"Matched: {False}")
+                    print(f"No matched text.\n")
+        
+        return results    
     
     def search_highlight_configlets(self, system_name: str, filter_substring: str, regex_pattern: str, context_lines: int = 0):
         """
