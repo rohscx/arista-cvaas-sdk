@@ -353,7 +353,7 @@ class AristaCVAAS(DependencyTracker):
         return [configlet for configlet in configlets if 'configletList' in configlet]
    
     @staticmethod
-    def match_config_patterns(config:str, patterns:str, print_matches=True):
+    def search_config_patterns(config:str, patterns:str, print_matches=True):
         """
         Checks a configuration against a list of regex patterns and returns the match results along with the matched text in a structured dictionary.
         Optionally prints the matched text based on a control flag.
