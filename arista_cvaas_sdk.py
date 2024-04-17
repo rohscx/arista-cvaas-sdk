@@ -390,7 +390,7 @@ class AristaCVAAS(DependencyTracker):
         
         return results    
     
-    def search_highlight_configlets(self, system_name: str, filter_substring: str, regex_pattern: str, context_lines: int = 0):
+    def search_configlets(self, system_name: str, filter_substring: str, regex_pattern: str, context_lines: int = 0):
         """
         Searches for configlets by system name, filters them by a substring, and searches within their configurations using a regular expression,
         highlighting the matches. Depending on 'context_lines', it either returns the entire configuration, just the matching lines, or the
