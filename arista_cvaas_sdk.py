@@ -320,24 +320,68 @@ class AristaCVAAS(DependencyTracker):
             if pruned_data_list:
                 pruned_array.append({'data': pruned_data_list})
         return pruned_array
-    
-    def flatten_array(self, arr):
-        """
-        Recursively flattens a nested list.
-        
-        Parameters:
-        - arr (list): A potentially nested list to be flattened.
 
-        Returns:
-        - list: A flattened version of the input list.
+    @staticmethod
+    def find_longer_prefixes(df: pd.DataFrame, network: str, le: Optional[int] = None, ge: Optional[int] = None, eq: Optional[int] = None) -> pd.DataFrame:
         """
-        flattened_list = []
-        for item in arr:
-            if isinstance(item, list):
-                flattened_list.extend(self.flatten_array(item))
-            else:
-                flattened_list.append(item)
-        return flattened_list
+        Filter a DataFrame to find networks that are supernets of a given network and meet optional prefix length criteria.
+    
+        Parameters:
+        df (pd.DataFrame): DataFrame containing a column 'Prefixes' with network prefixes as strings.
+        network (str): The network prefix to compare against, in CIDR notation.
+        le (Optional[int]): Optional maximum prefix length to filter by (inclusive).
+        ge (Optional[int]): Optional minimum prefix length to filter by (inclusive).
+        eq (Optional[int]): Optional exact prefix length to filter by.
+    
+        Returns:
+        pd.DataFrame: A DataFrame containing the prefixes that are supernets of the given network and meet the specified criteria.
+        """
+    
+        # Type checks
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df must be a pandas DataFrame")
+        if not isinstance(network, str):
+            raise TypeError("network must be a string")
+        if le is not None and not isinstance(le, int):
+            raise TypeError("le must be an integer or None")
+        if ge is not None and not isinstance(ge, int):
+            raise TypeError("ge must be an integer or None")
+        if eq is not None and not isinstance(eq, int):
+            raise TypeError("eq must be an integer or None")
+    
+        # Convert the user input string to an IP network object
+        try:
+            network = ipaddress.ip_network(network)
+        except ValueError as e:
+            raise ValueError(f"Invalid network: {network}") from e
+    
+        # Function to check if the network in the DataFrame is a supernet of the input
+        def is_relevant_prefix(prefix: str) -> bool:
+            try:
+                net = ipaddress.ip_network(prefix)
+                if not net.subnet_of(network):
+                    return False
+                if le is not None and net.prefixlen > le:
+                    return False
+                if ge is not None and net.prefixlen < ge:
+                    return False
+                if eq is not None and net.prefixlen != eq:
+                    return False
+                return True
+            except ValueError:
+                return False
+    
+        # Apply the function across the DataFrame
+        filtered_df = df[df['Prefixes'].apply(is_relevant_prefix)].copy()  # Create a copy explicitly
+    
+        # Convert prefixes to ipaddress.IPv4Network objects and sort
+        filtered_df['Network'] = filtered_df['Prefixes'].apply(lambda x: ipaddress.ip_network(x))
+        filtered_df.sort_values(by='Network', inplace=True)
+        
+        # Optionally, remove the helper 'Network' column if not needed
+        filtered_df.drop(columns='Network', inplace=True)
+        
+        return filtered_df
     
     @staticmethod
     def filter_configlets_with_list(configlets):
@@ -389,6 +433,24 @@ class AristaCVAAS(DependencyTracker):
                     print(f"No matched text.\n")
         
         return results    
+    
+    def flatten_array(self, arr):
+        """
+        Recursively flattens a nested list.
+        
+        Parameters:
+        - arr (list): A potentially nested list to be flattened.
+
+        Returns:
+        - list: A flattened version of the input list.
+        """
+        flattened_list = []
+        for item in arr:
+            if isinstance(item, list):
+                flattened_list.extend(self.flatten_array(item))
+            else:
+                flattened_list.append(item)
+        return flattened_list
     
     def search_configlets(self, system_name: str, filter_substring: str, regex_pattern: str, context_lines: int = 0):
         """
