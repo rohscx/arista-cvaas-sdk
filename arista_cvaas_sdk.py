@@ -1297,6 +1297,38 @@ class AristaCVAAS(DependencyTracker):
         result = [[key, value] for key, value in result_dict.items()]
         return result
 
+    def post_create_configlet(self, cvaas_config: dict, cvaas_configlet_name: str) -> dict:
+        """
+        Creates a new configlet in the CVaaS (Cloud Vision as a Service) platform.
+
+        Args:
+            cvaas_config (dict): The configuration details for the new configlet.
+                This should contain all necessary information needed to create the configlet.
+            cvaas_configlet_name (str): The name to assign to the new configlet. Should be unique.
+
+        Returns:
+            dict: A JSON response from the server containing details of the created configlet.
+                The response includes information such as the configlet ID, name, and any
+                other metadata associated with the new configlet.
+
+        Raises:
+            Exception: If an error occurs during the request or the response indicates a failure.
+        """
+        endpoint = '/configlet/addConfiglet.do'
+        body = {
+            'config': cvaas_config,
+            'name': cvaas_configlet_name
+        }
+
+        response = self.session.post(self.host_url + self.path + endpoint, headers=self.headers, json=body)
+
+        # Assuming `_check_response` is a method that checks the response for errors
+        error_response = self._check_response(response)
+        if error_response:
+            return error_response
+
+        return response.json()
+
     def post_append_configlet(self, source_configlet_identifier: str, target_configlet_identifier: str) -> Union[Dict[str, str], Dict[str, Any]]:
         """
         Appends the configuration of a source configlet to a target configlet.
