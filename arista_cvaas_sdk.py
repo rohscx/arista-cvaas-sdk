@@ -1297,6 +1297,85 @@ class AristaCVAAS(DependencyTracker):
         result = [[key, value] for key, value in result_dict.items()]
         return result
 
+    def post_create_config_diff(self, device_id: str, output_diff: bool = False, output_config: bool = False) -> dict:
+        """
+        Generates a configuration diff for a specific device in the CVaaS (CloudVision as a Service) platform.
+
+        Args:
+            device_id (str): The unique identifier of the device for which the configuration diff is required.
+            output_diff (bool): If True, prints the detailed configuration diff in a structured format.
+            output_config (bool): If True, prints the configuration lines that would be applied to the device.
+
+        Returns:
+            dict: A JSON response from the server containing the configuration difference between
+                the designed (intended) configuration and the running configuration.
+                The response includes information regarding the differences in configuration.
+
+        Raises:
+            Exception: If an error occurs during the request or if the response indicates a failure.
+        """
+        endpoint = "/api/v3/services/compliancecheck.Compliance/GetConfigDiff"
+        body = {
+            "lhs": {"device_id": device_id, "type": "DESIGNED_CONFIG"},
+            "rhs": {"device_id": device_id, "type": "RUNNING_CONFIG"}
+        }
+
+        try:
+            response = self.session.post(self.host_url + endpoint, headers=self.headers, json=body)
+            response.raise_for_status()  # Raises an HTTPError if the response status is 4xx or 5xx
+
+            # Assuming `_check_response` is a custom method to parse and raise appropriate errors
+            error_response = self._check_response(response)
+            if error_response:
+                return error_response
+
+            response_data = response.json()
+
+            # Corrected: Access the diff entries using the response data structure you've shared
+            if len(response_data) > 1 and 'diff' in response_data[1]:
+                diff_entries = response_data[1]['diff'].get('entries', [])
+            else:
+                diff_entries = []
+
+            # Output detailed diff if requested
+            if output_diff:
+                print(f"Detailed Diff for Device {device_id}")
+                for i in diff_entries:
+                    if 'CHANGE' in i['op']:
+                        print(f"(CH) {i['a_lineno']} {i['a_line']:<25}".ljust(50) +
+                            f"{i['b_lineno']:>25}{i['b_line']:<25}".ljust(12))
+                    elif 'DELETE' in i['op']:
+                        print(f"(-) {i['b_lineno']} {i['b_line']:<25}")
+                    elif 'ADD' in i['op']:
+                        print(f"(+) {i['a_lineno']} {i['a_line']:<25}")
+
+            # Output configuration to be applied if requested
+            if output_config:
+                printed_parents = set()  # Track parent line numbers that have already been printed
+                print(f"\nConfiguration to be Applied to Device {device_id}:")
+                for i in diff_entries:
+                    if 'CHANGE' in i['op']:
+                        if i['a_parent_lineno'] != -1:
+                            # print(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
+                            printed_parents.add(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
+                        # Print the new line that replaces the old one
+                        # print(f"{i['a_line']}")
+                        printed_parents.add(f"{i['a_line']}")
+                    elif 'ADD' in i['op']:
+                        if i['a_parent_lineno'] != -1:
+                            printed_parents.add(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
+                        # Print the added line
+                        printed_parents.add(f"{i['a_line']}")
+                    # Note: Deletions are typically not part of the configuration that is "applied"
+                    #       but are instead removed, so they are not included in this section.
+                print("\n".join(printed_parents))
+
+
+            return response_data
+
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to create configuration diff for device {device_id}: {e}")
+
     def post_create_configlet(self, cvaas_config: dict, cvaas_configlet_name: str) -> dict:
         """
         Creates a new configlet in the CVaaS (Cloud Vision as a Service) platform.
