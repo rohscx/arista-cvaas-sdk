@@ -1339,7 +1339,7 @@ class AristaCVAAS(DependencyTracker):
 
             # Output detailed diff if requested
             if output_diff:
-                print(f"Detailed Diff for Device {device_id}")
+                print(f"!Detailed Diff for Device {device_id}")
                 for i in diff_entries:
                     if 'CHANGE' in i['op']:
                         print(f"(CH) {i['a_lineno']} {i['a_line']:<25}".ljust(50) +
@@ -1351,24 +1351,39 @@ class AristaCVAAS(DependencyTracker):
 
             # Output configuration to be applied if requested
             if output_config:
-                printed_parents = set()  # Track parent line numbers that have already been printed
-                print(f"\nConfiguration to be Applied to Device {device_id}:")
-                for i in diff_entries:
-                    if 'CHANGE' in i['op']:
-                        if i['a_parent_lineno'] != -1:
-                            # print(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
-                            printed_parents.add(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
-                        # Print the new line that replaces the old one
-                        # print(f"{i['a_line']}")
-                        printed_parents.add(f"{i['a_line']}")
-                    elif 'ADD' in i['op']:
-                        if i['a_parent_lineno'] != -1:
-                            printed_parents.add(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
-                        # Print the added line
-                        printed_parents.add(f"{i['a_line']}")
-                    # Note: Deletions are typically not part of the configuration that is "applied"
-                    #       but are instead removed, so they are not included in this section.
-                print("\n".join(printed_parents))
+                printed_parent_lines = set()  # Track parent line numbers that have already been printed
+                config_lines = []  # Store the configuration lines to be printed
+
+                print(f"\n!Configuration to be Applied to Device {device_id}:")
+
+                for entry in diff_entries:
+                    operation = entry.get('op', '')
+
+                    if 'CHANGE' in operation or 'ADD' in operation:
+                        parent_lineno = entry.get('a_parent_lineno', -1)
+
+                        # Check if there's a valid parent line number and it hasn't been printed yet
+                        if parent_lineno != -1 and parent_lineno not in printed_parent_lines:
+                            parent_line = diff_entries[parent_lineno].get('a_line', '')
+                            if parent_line:  # Ensure the parent line is not empty
+                                config_lines.append(parent_line)
+                                printed_parent_lines.add(parent_lineno)
+
+                        # Add the current line (either changed or added)
+                        current_line = entry.get('a_line', '')
+                        if current_line:  # Ensure the current line is not empty
+                            config_lines.append(current_line)
+
+                # Remove potential duplicates while preserving order
+                seen = set()
+                unique_config_lines = []
+                for line in config_lines:
+                    if line not in seen:
+                        unique_config_lines.append(line)
+                        seen.add(line)
+
+                # Print the final configuration
+                print("\n".join(unique_config_lines))
 
 
             return response_data
