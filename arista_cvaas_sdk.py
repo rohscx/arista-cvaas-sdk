@@ -845,18 +845,17 @@ class AristaCVAAS(DependencyTracker):
             pp.pprint(configlet_info["matched"])
             print("\n", configlet_info["config"])
 
-    def get_image_bundles(self, ) -> List[Tuple[str, str]]:
+    def get_image_bundles(self, start=0, end=0) -> Dict[str, Any]:
         """
-        Filters devices based on a regex pattern matching either the hostname or the system MAC address.
+        Retrieves a configlet by its ID.
 
         Parameters:
-        - regex (Optional[str], optional): The regex pattern to filter devices. Defaults to None.
+        - configlet_id (str): The ID of the configlet to retrieve.
 
         Returns:
-        - List[Tuple[str, str]]: A list of tuples, each containing a hostname and system MAC address of a device that matches the regex pattern.
+        - Dict[str, Any]: The JSON response containing the configlet data.
         """
-
-        endpoint = f'/image/getImageBundles.do?startIndex=0&endIndex=0'
+        endpoint = f'/image/getImageBundles.do?startIndex={start}&endIndex={end}'
         response = self.session.get(self.host_url + self.path + endpoint, headers=self.headers)
 
         error_response = self._check_response(response)
@@ -864,7 +863,6 @@ class AristaCVAAS(DependencyTracker):
             return error_response
 
         return response.json()
-
 
     def get_system_mac_address_by_name(self, regex: Optional[str] = None) -> List[Tuple[str, str]]:
         """
@@ -1504,7 +1502,38 @@ class AristaCVAAS(DependencyTracker):
             return error_response
 
         return response.json()
-    
+
+    def post_assign_image_to_device(self, device_id: str, node_ip_address: str, image= dict, id_type= 'netelement')  -> Union[Dict[str, str], Dict[str, Any]]:
+        """
+        Assigns an EOS image to a device.
+
+        Parameters:
+        - device_id (str): The ID of the device (System MAC Address).
+        - node_ip_address(str): The Management IP address as seen in CVAAS.
+
+        Returns:
+        - Union[Dict[str, str], Dict[str, Any]]: The JSON response or an error message.
+        """
+        # remove ignore_list from configlets
+        info = f"Apply image: {image['name']} to {id_type} {device_id}"
+        node_id = image['imageBundleKeys'][0]
+        post_data = [{'data': [{'info': info,
+                        'infoPreview': info,
+                        'note': '',
+                        'action': 'associate',
+                        'nodeType': 'imagebundle',
+                        'nodeId': node_id,
+                        'toId': device_id,
+                        'toIdType': id_type,
+                        'fromId': '',
+                        'nodeName': image['name'],
+                        'fromName': '',
+                        'toName': '',
+                        'childTasks': [],
+                        'parentTask': ''}]}
+]
+        return self.post_provisioning_add_temp_actions(data_list=post_data)
+
     def post_assign_configlets_to_container(self, container_id: str, configlets: List[Dict[str, Any]], ignore_list: List[Dict[str, Any]] = []) -> Union[Dict[str, str], Dict[str, Any]]:
         """
         Assigns a list of configlets to a device.
