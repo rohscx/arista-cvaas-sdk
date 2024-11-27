@@ -845,6 +845,27 @@ class AristaCVAAS(DependencyTracker):
             pp.pprint(configlet_info["matched"])
             print("\n", configlet_info["config"])
 
+    def get_image_bundles(self, ) -> List[Tuple[str, str]]:
+        """
+        Filters devices based on a regex pattern matching either the hostname or the system MAC address.
+
+        Parameters:
+        - regex (Optional[str], optional): The regex pattern to filter devices. Defaults to None.
+
+        Returns:
+        - List[Tuple[str, str]]: A list of tuples, each containing a hostname and system MAC address of a device that matches the regex pattern.
+        """
+
+        endpoint = f'/image/getImageBundles.do?startIndex=0&endIndex=0'
+        response = self.session.get(self.host_url + self.path + endpoint, headers=self.headers)
+
+        error_response = self._check_response(response)
+        if error_response:
+            return error_response
+
+        return response.json()
+
+
     def get_system_mac_address_by_name(self, regex: Optional[str] = None) -> List[Tuple[str, str]]:
         """
         Filters devices based on a regex pattern matching either the hostname or the system MAC address.
@@ -1351,39 +1372,24 @@ class AristaCVAAS(DependencyTracker):
 
             # Output configuration to be applied if requested
             if output_config:
-                printed_parent_lines = set()  # Track parent line numbers that have already been printed
-                config_lines = []  # Store the configuration lines to be printed
-
+                printed_parents = list()  # Track parent line numbers that have already been printed
                 print(f"\n!Configuration to be Applied to Device {device_id}:")
-
-                for entry in diff_entries:
-                    operation = entry.get('op', '')
-
-                    if 'CHANGE' in operation or 'ADD' in operation:
-                        parent_lineno = entry.get('a_parent_lineno', -1)
-
-                        # Check if there's a valid parent line number and it hasn't been printed yet
-                        if parent_lineno != -1 and parent_lineno not in printed_parent_lines:
-                            parent_line = diff_entries[parent_lineno].get('a_line', '')
-                            if parent_line:  # Ensure the parent line is not empty
-                                config_lines.append(parent_line)
-                                printed_parent_lines.add(parent_lineno)
-
-                        # Add the current line (either changed or added)
-                        current_line = entry.get('a_line', '')
-                        if current_line:  # Ensure the current line is not empty
-                            config_lines.append(current_line)
-
-                # Remove potential duplicates while preserving order
-                seen = set()
-                unique_config_lines = []
-                for line in config_lines:
-                    if line not in seen:
-                        unique_config_lines.append(line)
-                        seen.add(line)
-
-                # Print the final configuration
-                print("\n".join(unique_config_lines))
+                for i in diff_entries:
+                    if 'CHANGE' in i['op']:
+                        if i['a_parent_lineno'] != -1:
+                            # print(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
+                            printed_parents.append(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
+                        # Print the new line that replaces the old one
+                        # print(f"{i['a_line']}")
+                        printed_parents.append(f"{i['a_line']}")
+                    elif 'ADD' in i['op']:
+                        if i['a_parent_lineno'] != -1:
+                            printed_parents.append(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
+                        # Print the added line
+                        printed_parents.append(f"{i['a_line']}")
+                    # Note: Deletions are typically not part of the configuration that is "applied"
+                    #       but are instead removed, so they are not included in this section.
+                print("\n".join(printed_parents))
 
 
             return response_data
