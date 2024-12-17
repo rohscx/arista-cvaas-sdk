@@ -1516,7 +1516,7 @@ class AristaCVAAS(DependencyTracker):
         """
         # remove ignore_list from configlets
         info = f"Apply image: {image['name']} to {id_type} {device_id}"
-        node_id = image['imageBundleKeys'][0]
+        node_id = image['key']
         post_data = [{'data': [{'info': info,
                         'infoPreview': info,
                         'note': '',
