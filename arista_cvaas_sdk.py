@@ -1413,18 +1413,25 @@ class AristaCVAAS(DependencyTracker):
             # Output configuration to be applied if requested
             if output_config:
                 printed_parents = list()  # Track parent line numbers that have already been printed
+                dedup_set = set()  # We'll store each line we add here
                 print(f"\n!Configuration to be Applied to Device {device_id}:")
                 for i in diff_entries:
                     if 'CHANGE' in i['op']:
                         if i['a_parent_lineno'] != -1:
+                            parent_line = diff_entries[i['a_parent_lineno']]['a_line']
+                            if parent_line not in dedup_set:
+                                printed_parents.append(parent_line)
+                                dedup_set.add(parent_line)
                             # print(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
-                            printed_parents.append(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
                         # Print the new line that replaces the old one
                         # print(f"{i['a_line']}")
                         printed_parents.append(f"{i['a_line']}")
                     elif 'ADD' in i['op']:
                         if i['a_parent_lineno'] != -1:
-                            printed_parents.append(f"{diff_entries[i['a_parent_lineno']]['a_line']}")
+                            parent_line = diff_entries[i['a_parent_lineno']]['a_line']
+                            if parent_line not in dedup_set:
+                                printed_parents.append(parent_line)
+                                dedup_set.add(parent_line)
                         # Print the added line
                         printed_parents.append(f"{i['a_line']}")
                     # Note: Deletions are typically not part of the configuration that is "applied"
