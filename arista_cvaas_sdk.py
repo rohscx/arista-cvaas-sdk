@@ -914,6 +914,48 @@ class AristaCVAAS(DependencyTracker):
 
         return configlet_ids
 
+    def get_configlet_history(self, configlet_id: str, start_index: int = 0, end_index: int = 5, target_date: int = None) -> Tuple[int, Dict[str, Any]]:
+        """
+        Retrieves the history of a specific configlet, processes date-time fields, and optionally compares
+        against a specific date.
+
+        Parameters:
+        - configlet_id (str): The unique identifier of the configlet.
+        - start_index (int, optional): The starting index of configlets to retrieve. Defaults to 0.
+        - end_index (int, optional): The ending index of configlets to retrieve. Defaults to 5.
+        - target_date (int, optional): A specific date in long format to compare against. If provided,
+        the function prints the old and new configuration when this date matches
+        `oldDateTimeInLongFormat` or `updatedDateTimeInLongFormat`.
+
+        Returns:
+        - Tuple[int, Dict[str, Any]]: A tuple containing the status code and the response JSON.
+
+        The function always processes date-time fields by converting `oldDateTimeInLongFormat` and
+        `updatedDateTimeInLongFormat` to a human-readable format.
+        """
+
+        endpoint = f'/configlet/getConfigletHistory.do?configletId={configlet_id}&startIndex={start_index}&endIndex={end_index}'
+        response = self.session.get(self.host_url + self.path + endpoint, headers=self.headers)
+
+        error_response = self._check_response(response)
+        if error_response:
+            return error_response
+
+        for x in response.json().get("configletHistory", []):
+            # Convert and display date-time fields
+            old_date = self.convert_date_time_from_long_format(x["oldDateTimeInLongFormat"])
+            updated_date = self.convert_date_time_from_long_format(x["updatedDateTimeInLongFormat"])
+            print("\noldDateTimeInLongFormat:", x["oldDateTimeInLongFormat"], old_date)
+            print("updatedDateTimeInLongFormat:", x["updatedDateTimeInLongFormat"], updated_date)
+
+            # Check if the target_date matches either of the long-format fields
+            if target_date and (x["oldDateTimeInLongFormat"] == target_date or x["updatedDateTimeInLongFormat"] == target_date):
+                print(f"{'-' * 10} Matching entry found: {'-' * 10}")
+                print(f"{'*' * 10} Old Config: {'*' * 10}\n", x.get("oldConfig"))
+                print(f"{'*' * 10} New Config: {'*' * 10}\n", x.get("newConfig"))
+
+        return response.status_code, response.json()
+
     def get_configlets(self, start_index: int = 0, end_index: int = 2000) -> Tuple[int, Dict[str, Any]]:
         """
         Retrieves a list of configlets.
