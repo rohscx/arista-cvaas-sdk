@@ -1091,6 +1091,7 @@ class AristaCVAAS(DependencyTracker):
             results.append(response)        
         return results
 
+
     def get_tasks(self) -> Dict[str, Any]:
         """
         Retrieves a list of tasks.
@@ -1185,6 +1186,30 @@ class AristaCVAAS(DependencyTracker):
             if error_response:
                 return error_response
             return response.json()
+
+    def post_retrieve_device_management_ip(self, device_netelement_id: str) -> Dict[str, Any]:
+        """
+        Retrieves a devices managment IP addresses by ID.
+
+        Parameters:
+        - device_netelement_id (str): The ID of the device to retrieve.
+
+        Returns:
+        - Dict[str, Any]: The JSON response containing the configlet data.
+        """
+        request_body = {
+            "configIdList": [],
+            "netElementId": device_netelement_id,
+            "pageType": "changeIP"
+        }
+        endpoint = f'/configlet/getManagementIp.do?startIndex=0&endIndex=999'
+        response = self.session.post(self.host_url + self.path + endpoint, headers=self.headers, data=json.dumps(request_body))
+
+        error_response = self._check_response(response)
+        if error_response:
+            return error_response
+
+        return response.json()
 
     def get_inventory_device_config(self, mac_address: str) -> Dict[str, Any]:
         """
