@@ -1469,12 +1469,12 @@ class AristaCVAAS(DependencyTracker):
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to create configuration diff for device {device_id}: {e}")
 
-    def post_create_configlet(self, cvaas_config: dict, cvaas_configlet_name: str) -> dict:
+    def post_create_configlet(self, cvaas_config: str, cvaas_configlet_name: str) -> dict:
         """
         Creates a new configlet in the CVaaS (Cloud Vision as a Service) platform.
 
         Args:
-            cvaas_config (dict): The configuration details for the new configlet.
+            cvaas_config (str): The configuration details for the new configlet.
                 This should contain all necessary information needed to create the configlet.
             cvaas_configlet_name (str): The name to assign to the new configlet. Should be unique.
 
