@@ -1674,70 +1674,197 @@ class AristaCVAAS(DependencyTracker):
 
     def assign_configlets_to_devices(
         self,
-        targets: List[Dict[str, Any]],
-        globals_overrides: List[Tuple[str, str]],
-        ignore_list: Optional[List[Tuple[str, str]]] = None,
-        debug: bool = False
-    ) -> None:
-        """Assign configlets to devices with optional debug output.
+        assignments: Union[pd.DataFrame, List[Dict[str, Any]]],
+        *,
+        configlets_are_names: bool = False,
+        device_id_key: str = "device_id",
+        node_ip_key: str = "node_ip_address",
+        configlets_key: str = "configlets",
+        ignore_list_key: str = "ignore_list",
+        default_ignore_list: Optional[List[Any]] = None,
+        batch_size: int = 25
+    ) -> List[Union[Dict[str, str], Dict[str, Any]]]:
+        """Assign multiple configlets to many devices efficiently.
 
         Parameters
         ----------
-        targets: List[Dict[str, Any]]
-            Target devices containing ``hostname`` and ``systemMacAddress`` keys.
-        globals_overrides: List[Tuple[str, str]]
-            Global configlet overrides to apply alongside device configlets.
-        ignore_list: Optional[List[Tuple[str, str]]]
-            Optional configlets to remove during assignment.
-        debug: bool, optional
-            When ``True`` prints the payload instead of executing the API call.
+        assignments: Union[pd.DataFrame, List[Dict[str, Any]]]
+            Iterable describing each assignment.  Every entry must contain
+            ``device_id_key``, ``node_ip_key`` and ``configlets_key``.
+        configlets_are_names: bool, optional
+            When ``True`` the values listed under ``configlets_key`` (and any
+            ignore lists) are treated as configlet *names*.  They are resolved to
+            IDs once and reused for every request which avoids repeated API
+            calls.  When ``False`` the values are assumed to already be IDs.
+        device_id_key / node_ip_key / configlets_key / ignore_list_key: str
+            Keys used inside every assignment dictionary.  They allow callers to
+            pass in different data structures without pre-processing.
+        default_ignore_list: Optional[List[Any]]
+            Ignore list applied to every assignment when an entry does not
+            specify its own ``ignore_list_key``.
+        batch_size: int, optional
+            Number of assignment payloads to submit to
+            :meth:`post_provisioning_add_temp_actions` at a time.  This keeps the
+            request payloads reasonably sized while still reducing the amount of
+            per-assignment bookkeeping work.
+
+        Returns
+        -------
+        List[Union[Dict[str, str], Dict[str, Any]]]
+            Aggregated list of responses from
+            :meth:`post_provisioning_add_temp_actions`.
+
+        Notes
+        -----
+        The public ``post_assign_configlets_to_device`` helper performs the
+        actual API call.  ``assign_configlets_to_devices`` focuses on preparing
+        the payloads in a performant fashion by
+
+        * resolving configlet names to IDs only once,
+        * avoiding repeated membership checks by using hashed lookups, and
+        * de-duplicating configlets within an assignment.
         """
 
-        printer = pp.PrettyPrinter(indent=4)
+        if batch_size <= 0:
+            raise ValueError("batch_size must be greater than zero")
 
-        for target in targets:
-            print(f"Processing Device: {target['hostname']}")
-            configlets = self.get_device_configlets(mac_address=target['systemMacAddress'])
-            target_list: List[str] = []
+        if isinstance(assignments, pd.DataFrame):
+            assignments = assignments.to_dict("records")
+        else:
+            assignments = list(assignments)
 
-            for configlet in configlets['configletList']:
-                if re.match(r"^device_", configlet['name']):
-                    target_list.append(configlet['name'])
+        if not assignments:
+            return []
 
-                    target_configlets = globals_overrides + [
-                        (
-                            configlet['name'],
-                            self.get_configlet_by_name(configlet['name'])['key']
-                        )
-                    ]
-                    printer.pprint(target_configlets)
+        configlet_name_to_id: Optional[Dict[str, str]] = None
+        if configlets_are_names:
+            # Fetch once so repeated assignments do not trigger additional
+            # network requests.
+            configlet_name_to_id = {name: key for name, key in self.get_configlet_names_ids()}
 
-                    target_configlet_ids = [item[1] for item in target_configlets]
-                    printer.pprint(target_configlet_ids)
+        def canonical(value: Any) -> Any:
+            """Return a hashable representation of ``value`` for set membership."""
+            if isinstance(value, dict):
+                # ``json.dumps(..., sort_keys=True)`` provides deterministic
+                # output that can safely be used as a unique identifier for the
+                # dictionary contents.
+                return json.dumps(value, sort_keys=True)
+            return value
 
-                    if ignore_list:
-                        print("Ignore List:")
-                        printer.pprint(ignore_list)
+        def deduplicate(items: List[Any]) -> List[Any]:
+            """Return ``items`` with duplicates removed while preserving order."""
+            seen: set = set()
+            result: List[Any] = []
+            for item in items:
+                marker = canonical(item)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                result.append(item)
+            return result
 
-                    device_mgmt_ip = self.post_retrieve_device_management_ip(
-                        target['systemMacAddress']
-                    )['defaultProposedManagementIp']['address']
-                    print(f"Proposed Management IP: {device_mgmt_ip}")
+        ignore_lookup_cache: Dict[Tuple[Any, ...], set] = {}
 
-                    payload = {
-                        "device_id": target['systemMacAddress'],
-                        "node_ip_address": device_mgmt_ip,
-                        "configlets": target_configlet_ids,
-                        "ignore_list": [item[1] for item in ignore_list] if ignore_list else []
-                    }
+        def build_lookup(values: List[Any]) -> set:
+            """Construct a cached lookup set for the provided ``values``."""
+            if not values:
+                return set()
+            key = tuple(canonical(value) for value in values)
+            lookup = ignore_lookup_cache.get(key)
+            if lookup is None:
+                lookup = set(key)
+                ignore_lookup_cache[key] = lookup
+            return lookup
 
-                    if debug:
-                        print("DEBUG: The following payload would be sent to the API:")
-                        printer.pprint(payload)
-                    else:
-                        self.post_assign_configlets_to_device(**payload)
+        def resolve_configlet(value: Any) -> Any:
+            """Convert a configlet name into an ID when required."""
+            if not configlets_are_names:
+                return value
+            if not isinstance(value, str):
+                raise TypeError(
+                    "Configlet identifiers must be strings when "
+                    "configlets_are_names is True"
+                )
+            assert configlet_name_to_id is not None  # for type-checkers
+            try:
+                return configlet_name_to_id[value]
+            except KeyError as exc:  # pragma: no cover - defensive programming
+                raise ValueError(f"Configlet '{value}' was not found") from exc
 
-            print()
+        default_ignore_list = default_ignore_list or []
+        default_ignore_list = [resolve_configlet(item) for item in default_ignore_list]
+        default_ignore_list = deduplicate(default_ignore_list)
+        default_ignore_lookup = build_lookup(default_ignore_list)
+
+        payloads: List[Dict[str, Any]] = []
+
+        for assignment in assignments:
+            try:
+                device_id = assignment[device_id_key]
+                node_ip = assignment[node_ip_key]
+                configlets = assignment[configlets_key]
+            except KeyError as exc:
+                missing_key = exc.args[0]
+                raise KeyError(f"Assignment entry is missing required key: {missing_key}") from exc
+
+            if not isinstance(configlets, (list, tuple)):
+                raise TypeError(
+                    f"Assignment for device '{device_id}' must supply a list of configlets"
+                )
+
+            resolved_configlets = [resolve_configlet(item) for item in configlets]
+            resolved_configlets = deduplicate(resolved_configlets)
+
+            local_ignore_raw = assignment.get(ignore_list_key, default_ignore_list)
+            if local_ignore_raw is default_ignore_list:
+                resolved_ignore = default_ignore_list
+                ignore_lookup = default_ignore_lookup
+            else:
+                if not isinstance(local_ignore_raw, (list, tuple)):
+                    raise TypeError("ignore_list must be a list when provided in an assignment")
+                resolved_ignore = [resolve_configlet(item) for item in local_ignore_raw]
+                resolved_ignore = deduplicate(resolved_ignore)
+                ignore_lookup = build_lookup(resolved_ignore)
+
+            filtered_configlets = [
+                item for item in resolved_configlets if canonical(item) not in ignore_lookup
+            ]
+
+            if not filtered_configlets:
+                # Nothing to assign for this device once duplicates and ignore
+                # lists have been processed.
+                continue
+
+            payloads.append({
+                'data': [{
+                    'action': 'associate',
+                    'configletBuilderList': [],
+                    'configletBuilderNamesList': [],
+                    'configletList': filtered_configlets,
+                    'fromId': '',
+                    'fromName': '',
+                    'ignoreConfigletBuilderList': [],
+                    'ignoreConfigletBuilderNamesList': [],
+                    'ignoreConfigletList': resolved_ignore,
+                    'ignoreConfigletNamesList': [],
+                    'nodeId': '',
+                    'nodeName': '',
+                    'nodeTargetIpAddress': node_ip,
+                    'nodeType': 'configlet',
+                    'toId': device_id,
+                    'toIdType': 'netelement'
+                }]
+            })
+
+        if not payloads:
+            return []
+
+        results: List[Union[Dict[str, str], Dict[str, Any]]] = []
+        for index in range(0, len(payloads), batch_size):
+            chunk = payloads[index:index + batch_size]
+            results.extend(self.post_provisioning_add_temp_actions(data_list=chunk))
+
+        return results
 
     def post_provisioning_save_temp_actions(self, data: Dict[str, Any]) -> Union[Dict[str, str], Dict[str, Any]]:
         """
