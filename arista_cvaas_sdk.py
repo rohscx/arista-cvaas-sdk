@@ -1672,6 +1672,73 @@ class AristaCVAAS(DependencyTracker):
            'toIdType': 'netelement'}]}]
         return self.post_provisioning_add_temp_actions(data_list=post_data)
 
+    def assign_configlets_to_devices(
+        self,
+        targets: List[Dict[str, Any]],
+        globals_overrides: List[Tuple[str, str]],
+        ignore_list: Optional[List[Tuple[str, str]]] = None,
+        debug: bool = False
+    ) -> None:
+        """Assign configlets to devices with optional debug output.
+
+        Parameters
+        ----------
+        targets: List[Dict[str, Any]]
+            Target devices containing ``hostname`` and ``systemMacAddress`` keys.
+        globals_overrides: List[Tuple[str, str]]
+            Global configlet overrides to apply alongside device configlets.
+        ignore_list: Optional[List[Tuple[str, str]]]
+            Optional configlets to remove during assignment.
+        debug: bool, optional
+            When ``True`` prints the payload instead of executing the API call.
+        """
+
+        printer = pp.PrettyPrinter(indent=4)
+
+        for target in targets:
+            print(f"Processing Device: {target['hostname']}")
+            configlets = self.get_device_configlets(mac_address=target['systemMacAddress'])
+            target_list: List[str] = []
+
+            for configlet in configlets['configletList']:
+                if re.match(r"^device_", configlet['name']):
+                    target_list.append(configlet['name'])
+
+                    target_configlets = globals_overrides + [
+                        (
+                            configlet['name'],
+                            self.get_configlet_by_name(configlet['name'])['key']
+                        )
+                    ]
+                    printer.pprint(target_configlets)
+
+                    target_configlet_ids = [item[1] for item in target_configlets]
+                    printer.pprint(target_configlet_ids)
+
+                    if ignore_list:
+                        print("Ignore List:")
+                        printer.pprint(ignore_list)
+
+                    device_mgmt_ip = self.post_retrieve_device_management_ip(
+                        target['systemMacAddress']
+                    )['defaultProposedManagementIp']['address']
+                    print(f"Proposed Management IP: {device_mgmt_ip}")
+
+                    payload = {
+                        "device_id": target['systemMacAddress'],
+                        "node_ip_address": device_mgmt_ip,
+                        "configlets": target_configlet_ids,
+                        "ignore_list": [item[1] for item in ignore_list] if ignore_list else []
+                    }
+
+                    if debug:
+                        print("DEBUG: The following payload would be sent to the API:")
+                        printer.pprint(payload)
+                    else:
+                        self.post_assign_configlets_to_device(**payload)
+
+            print()
+
     def post_provisioning_save_temp_actions(self, data: Dict[str, Any]) -> Union[Dict[str, str], Dict[str, Any]]:
         """
         Sends a POST request to save temporary provisioning actions.
